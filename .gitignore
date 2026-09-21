@@ -4,6 +4,8 @@ node_modules/
 # 运行时生成的临时文件
 qr/
 qrkeys.json
+qr_bundle.enc
+qr_decrypted/
 
 # 环境变量
 .env

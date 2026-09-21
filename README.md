@@ -113,10 +113,11 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
 
    | 通知渠道 | Secret 变量名 | 说明 |
    |---------|-------------|------|
-   | 企业微信机器人 | `WECOM_BOT_KEY` | 企业微信群机器人 webhook 的 key |
+   | 企业微信机器人 | `WECOM_BOT_KEY` | 企业微信群机器人 webhook 完整地址或 key |
    | 钉钉机器人 | `DINGTALK_BOT_KEY` | 钉钉机器人 access_token |
    | 钉钉加签 | `DINGTALK_SECRET` | 钉钉机器人加签密钥（可选） |
-   | 飞书机器人 | `FEISHU_BOT_KEY` | 飞书自定义机器人 webhook 的 key |
+   | 飞书机器人 | `FEISHU_BOT_KEY` | 飞书自定义机器人 webhook 完整地址或 key |
+   | 飞书加签 | `FEISHU_SECRET` | 飞书机器人加签密钥（机器人开启"签名校验"时必填，否则消息会被静默拒绝） |
    | 云湖机器人 | `YUNHU_BOT_KEY` | 云湖机器人 webhook 的 key |
    | Server酱 | `SERVERCHAN_SENDKEY` | Server酱 SendKey |
    | PushPlus | `PUSHPLUS_TOKEN` | PushPlus token |

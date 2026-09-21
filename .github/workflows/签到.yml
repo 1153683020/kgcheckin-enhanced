@@ -46,6 +46,7 @@ jobs:
           DINGTALK_BOT_KEY: ${{ secrets.DINGTALK_BOT_KEY }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
           FEISHU_BOT_KEY: ${{ secrets.FEISHU_BOT_KEY }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
           YUNHU_BOT_KEY: ${{ secrets.YUNHU_BOT_KEY }}
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}

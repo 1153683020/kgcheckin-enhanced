@@ -5,6 +5,22 @@ import { sendNotify } from "./utils/notify.js";
 import { close_api, daysUntil, delay, parseVipTime, send, startService, waitForApi } from "./utils/utils.js";
 import { buildCookieHeader, ensureDfid } from "./utils/dfid.js";
 
+/**
+ * 构造接口错误详情，便于排查：
+ * 优先返回非空 data（脱敏），再附 msg，最后附错误码；没有 data 时保留错误码。
+ */
+function bizErrDetail(res) {
+  const parts = []
+  const data = res?.data
+  if (data != null && data !== '' && (typeof data !== 'object' || Object.keys(data).length > 0)) {
+    parts.push(`data=${typeof data === 'object' ? JSON.stringify(sanitizeForLog(data)) : data}`)
+  }
+  const msg = res?.msg || res?.error_msg
+  if (msg) parts.push(`msg=${msg}`)
+  parts.push(`error_code=${res?.error_code ?? res?.status ?? '未知'}`)
+  return parts.join(', ')
+}
+
 async function main() {
 
   const USERINFO = process.env.USERINFO
@@ -157,21 +173,30 @@ async function main() {
             if (receiveRes.status === 1) {
               printGreen("一天概念VIP领取成功")
               dayVipStatus = '成功'
+            } else if (receiveRes.error_code === 131001) {
+              // 131001：今日已签到领取，属正常情况而非失败
+              printGreen("一天概念VIP今日已领取")
+              dayVipStatus = '今日已领取'
             } else {
-              dayVipStatus = `失败(${receiveRes.error_code ?? receiveRes.status ?? '未知'})`
-              printRed(`一天概念VIP领取失败：${receiveRes.msg || receiveRes.error_msg || ''}`)
+              dayVipStatus = `失败(${bizErrDetail(receiveRes)})`
+              printRed(`一天概念VIP领取失败：${bizErrDetail(receiveRes)}`)
             }
           }
 
           // 升级为畅听 VIP（需先领取一天 VIP，有效期 24h）
           printYellow("升级畅听VIP...")
           const upgradeRes = await send(`/youth/day/vip/upgrade?timestrap=${Date.now()}`, "GET", headers)
+          const upgradeMsg = String(upgradeRes?.msg || upgradeRes?.error_msg || upgradeRes?.data?.msg || (typeof upgradeRes?.data === 'string' ? upgradeRes.data : '') || '')
           if (upgradeRes.status === 1) {
             printGreen("升级畅听VIP成功")
             upgradeStatus = '成功'
+          } else if (/已(经)?领取/.test(upgradeMsg)) {
+            // “已经领取过升级vip奖励”等文案：今日已升级，属正常情况而非失败
+            printGreen(`升级畅听VIP：${upgradeMsg}`)
+            upgradeStatus = '今日已升级'
           } else {
-            upgradeStatus = `失败(${upgradeRes.error_code ?? upgradeRes.status ?? '未知'})`
-            printRed(`升级畅听VIP失败：${upgradeRes.msg || upgradeRes.error_msg || ''}`)
+            upgradeStatus = `失败(${bizErrDetail(upgradeRes)})`
+            printRed(`升级畅听VIP失败：${bizErrDetail(upgradeRes)}`)
           }
         }
 

@@ -43,7 +43,8 @@ function startService() {
     const msg = String(data).trim()
     if (msg) console.log('[api stderr]', msg)
   })
-  api.on('close', code => console.log(`[api] 子进程退出，code=${code}`))
+  // 注意：close_api 以 SIGKILL 主动结束进程组时，close 事件的 code 为 null，退出信息在 signal 字段
+  api.on('close', (code, signal) => console.log(`[api] 服务已退出（${signal ? `signal=${signal}` : `code=${code}`}）`))
 
   return api
 }
