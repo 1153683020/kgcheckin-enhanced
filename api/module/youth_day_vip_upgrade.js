@@ -2,7 +2,7 @@
 module.exports = (params, useAxios) => {
   const paramsMap = {
     kugouid: Number(params?.userid || params?.cookie?.userid || 0),
-    ad_type: '1',
+    ad_type: 1,
   }
 
   return useAxios({

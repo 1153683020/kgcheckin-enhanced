@@ -96,4 +96,34 @@ async function send(path, method, headers) {
   throw lastError
 }
 
-export { delay, startService, close_api, send, waitForApi }
+/**
+ * 解析 VIP 到期时间，兼容 'YYYY-MM-DD HH:mm:ss' / 'YYYY-MM-DD' / 秒或毫秒时间戳
+ * @param {string|number} value
+ * @returns {Date|null} 无法解析时返回 null
+ */
+function parseVipTime(value) {
+  if (value == null || value === '') return null
+  // 纯数字：秒级或毫秒级时间戳
+  if (typeof value === 'number' || /^\d+$/.test(String(value).trim())) {
+    const num = Number(value)
+    const ms = num < 1e12 ? num * 1000 : num
+    const d = new Date(ms)
+    return isNaN(d.getTime()) ? null : d
+  }
+  // 字符串日期：'-' 换成 '/' 以提升各环境解析兼容性
+  const d = new Date(String(value).trim().replace(/-/g, '/'))
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * 计算到指定日期的剩余天数（向上取整；负数表示已过期）
+ * @param {Date|null} date
+ * @returns {number|null}
+ */
+function daysUntil(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return null
+  const ms = date.getTime() - Date.now()
+  return Math.ceil(ms / (24 * 60 * 60 * 1000))
+}
+
+export { delay, startService, close_api, send, waitForApi, parseVipTime, daysUntil }

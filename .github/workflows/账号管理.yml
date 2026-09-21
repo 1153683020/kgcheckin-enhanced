@@ -1,14 +1,21 @@
-name: 签到
+name: 账号管理
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '10 17 * * *'
+    inputs:
+      operation:
+        description: "操作类型（vip=查询各账号VIP状态；refresh=刷新登录token）"
+        required: true
+        type: choice
+        default: "vip"
+        options:
+          - vip
+          - refresh
 permissions:
   contents: read
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -18,6 +25,18 @@ jobs:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: ./api/package-lock.json
+      # 刷新登录后需要用 gh 把新 token 写回 Secret USERINFO
+      - name: 检查 GitHub CLI
+        if: github.event.inputs.operation == 'refresh'
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh -y
+          fi
+          gh --version
       - name: 缓存依赖
         id: cache-npm
         uses: actions/cache@v4
@@ -29,19 +48,13 @@ jobs:
       - name: 安装依赖
         run: npm run install
         if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
-      # 错峰随机延迟：避免大量 fork 在同一时刻集中请求酷狗接口被风控
-      - name: 错峰随机延迟
-        run: |
-          DELAY=$((RANDOM % 600))
-          echo "随机延迟 ${DELAY} 秒后执行签到"
-          sleep "$DELAY"
-      - name: 执行签到
-        run: npm run main
+      - name: 执行账号管理
+        run: node account.js
         env:
+          OPERATION: ${{ github.event.inputs.operation }}
           USERINFO: ${{ secrets.USERINFO }}
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # 通知渠道（按需配置，全部可选）
           WECOM_BOT_KEY: ${{ secrets.WECOM_BOT_KEY }}
           DINGTALK_BOT_KEY: ${{ secrets.DINGTALK_BOT_KEY }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}

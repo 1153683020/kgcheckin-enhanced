@@ -2,7 +2,8 @@ import { printBlue, printGreen, printMagenta, printRed, printYellow } from "./ut
 import { hasSecretWriteToken, setRepoSecret } from "./utils/githubSecrets.js";
 import { maskDisplayName, maskIdentifier, sanitizeForLog, summarizeResponse } from "./utils/safeLog.js";
 import { sendNotify } from "./utils/notify.js";
-import { close_api, delay, send, startService, waitForApi } from "./utils/utils.js";
+import { close_api, daysUntil, delay, parseVipTime, send, startService, waitForApi } from "./utils/utils.js";
+import { buildCookieHeader, ensureDfid } from "./utils/dfid.js";
 
 async function main() {
 
@@ -43,7 +44,11 @@ async function main() {
       // 单账号异常隔离：任何一个账号的请求/解析出错，只记录该账号失败，
       // 不影响其余账号继续执行，也保证后续通知与 secret 刷新一定能触发。
       try {
-        let headers = { 'cookie': 'token=' + user.token + '; userid=' + user.userid }
+        // 确保设备指纹 dfid 存在（风控较严的接口要求真实 dfid；缺失时静默补取，获取到则稍后回写 USERINFO）
+        if (!user.dfid && await ensureDfid(user)) {
+          needRefresh = true
+        }
+        let headers = { 'cookie': buildCookieHeader(user) }
         const userDetail = await send(`/user/detail?timestrap=${Date.now()}`, "GET", headers)
         if (userDetail?.data?.nickname == null) {
           const safeUserId = maskIdentifier(user.userid)
@@ -58,6 +63,9 @@ async function main() {
             listen: '账号不存在',
             vipClaim: '0/8',
             vipExpiry: '未知',
+            dayVip: '-',
+            upgrade: '-',
+            remainDays: null,
             error: 'token过期或账号不存在'
           })
           hasError = true
@@ -75,7 +83,7 @@ async function main() {
               printYellow(`账号 ${safeNickname} 需要刷新token`)
               user.token = refreshToken.data.token
               // 用新 token 重建本次请求的 headers，使后续听歌/VIP 领取使用刷新后的凭证
-              headers = { 'cookie': 'token=' + user.token + '; userid=' + user.userid }
+              headers = { 'cookie': buildCookieHeader(user) }
             }
           }
         }
@@ -110,7 +118,8 @@ async function main() {
             printGreen(`第${i}次领取成功`)
             claimCount++
             if (i != 8) {
-              await delay(30 * 1000)
+              // 25~35 秒随机间隔，降低固定节奏被风控识别的概率
+              await delay(25000 + Math.floor(Math.random() * 10000))
             }
           } else if (ad.error_code === 30002) {
             printGreen("今天次数已用光")
@@ -123,12 +132,57 @@ async function main() {
           }
         }
 
+        // 查询今日已领取 VIP 状态：product_type=tvip 为已领取未升级，svip 为已升级（目标）
+        // 其他 vip 状态（dvip/qvip 等）不做特殊处理，按未领取走完整流程
+        printYellow("查询今日已领取VIP状态...")
+        const unionRes = await send(`/youth/union/vip?timestrap=${Date.now()}`, "GET", headers)
+        const productType = unionRes?.status === 1 ? unionRes?.data?.product_type : null
+        let dayVipStatus = '-'
+        let upgradeStatus = '-'
+
+        if (productType === 'svip') {
+          // 目标已达成（已是畅听VIP），跳过领取与升级，减少不必要请求
+          printGreen("已是畅听VIP(svip)，无需领取与升级")
+          dayVipStatus = '已领取'
+          upgradeStatus = '已是svip'
+        } else {
+          if (productType === 'tvip') {
+            // 已领取但未升级：跳过领取，直接升级
+            printYellow("已领取一天VIP(tvip)但未升级，直接升级")
+            dayVipStatus = '已领取'
+          } else {
+            // 未领取（或其他类型）：领取一天概念版 VIP（receive_day 传当天；勿频繁调用、勿领多日）
+            printYellow("领取一天概念VIP...")
+            const receiveRes = await send(`/youth/day/vip?receive_day=${date}&timestrap=${Date.now()}`, "GET", headers)
+            if (receiveRes.status === 1) {
+              printGreen("一天概念VIP领取成功")
+              dayVipStatus = '成功'
+            } else {
+              dayVipStatus = `失败(${receiveRes.error_code ?? receiveRes.status ?? '未知'})`
+              printRed(`一天概念VIP领取失败：${receiveRes.msg || receiveRes.error_msg || ''}`)
+            }
+          }
+
+          // 升级为畅听 VIP（需先领取一天 VIP，有效期 24h）
+          printYellow("升级畅听VIP...")
+          const upgradeRes = await send(`/youth/day/vip/upgrade?timestrap=${Date.now()}`, "GET", headers)
+          if (upgradeRes.status === 1) {
+            printGreen("升级畅听VIP成功")
+            upgradeStatus = '成功'
+          } else {
+            upgradeStatus = `失败(${upgradeRes.error_code ?? upgradeRes.status ?? '未知'})`
+            printRed(`升级畅听VIP失败：${upgradeRes.msg || upgradeRes.error_msg || ''}`)
+          }
+        }
+
         let vipExpiry = '未知'
+        let remainDays = null
         const vip_details = await send(`/user/vip/detail?timestrap=${Date.now()}`, "GET", headers)
         if (vip_details.status === 1 && Array.isArray(vip_details.data?.busi_vip) && vip_details.data.busi_vip.length > 0) {
           vipExpiry = vip_details.data.busi_vip[0].vip_end_time
+          remainDays = daysUntil(parseVipTime(vipExpiry))
           printBlue(`今天是：${date}`)
-          printBlue(`VIP到期时间：${vipExpiry}\n`)
+          printBlue(`VIP到期时间：${vipExpiry}${remainDays != null ? `（还剩 ${remainDays} 天）` : ''}\n`)
         } else {
           printRed("获取失败\n")
           errorMsg[`${safeNickname} vip_details`] = summarizeResponse(vip_details)
@@ -140,21 +194,27 @@ async function main() {
           status: listenStatus === '失败' || claimCount === 0 ? '部分失败' : '成功',
           listen: listenStatus,
           vipClaim: `${claimCount}/${claimTotal}`,
+          dayVip: dayVipStatus,
+          upgrade: upgradeStatus,
           vipExpiry,
+          remainDays,
           error: ''
         })
       } catch (err) {
         const safeUserId = maskIdentifier(user.userid || '未知')
         printRed(`账号 ${safeUserId} 处理异常：${err && err.message ? err.message : String(err)}`)
         errorMsg[safeUserId] = { msg: '处理异常', error: err && err.message ? err.message : String(err) }
-        notifyResults.push({
-          nickname: safeUserId,
-          status: '失败',
-          listen: '异常',
-          vipClaim: '0/8',
-          vipExpiry: '未知',
-          error: err && err.message ? err.message : String(err)
-        })
+          notifyResults.push({
+            nickname: safeUserId,
+            status: '失败',
+            listen: '异常',
+            vipClaim: '0/8',
+            vipExpiry: '未知',
+            dayVip: '-',
+            upgrade: '-',
+            remainDays: null,
+            error: err && err.message ? err.message : String(err)
+          })
         hasError = true
         continue
       }
@@ -178,7 +238,7 @@ async function main() {
         secretError = new Error("secret <USERINFO> token刷新失败")
       }
     } else {
-      printYellow("存在账号需要刷新token，但是未配置PAT，未刷新token最多两个月后过期")
+      printYellow("存在账号数据变化（token刷新/dfid补齐），但是未配置PAT，无法回写；未刷新token最多两个月后过期")
     }
   }
 
@@ -190,13 +250,32 @@ async function main() {
   const failCount = notifyResults.length - successCount
   content += `✅ 成功: ${successCount}  ❌ 失败: ${failCount}\n`
 
+  // 临期提醒：VIP 剩余 ≤3 天的账号置顶提示
+  const expiring = notifyResults.filter(r => r.remainDays != null && r.remainDays <= 3)
+  if (expiring.length) {
+    content += `⏳ 临期提醒（≤3天）: ` + expiring.map(r => `${r.nickname}(${r.remainDays}天)`).join('、') + `\n`
+  }
+
   for (const r of notifyResults) {
     content += `\n【${r.nickname}】\n`
     content += `  🎵 听歌领取: ${r.listen}\n`
     content += `  🎁 VIP领取: ${r.vipClaim} 次\n`
-    content += `  ⏰ VIP到期: ${r.vipExpiry}\n`
+    content += `  🎫 单日VIP: ${r.dayVip || '-'}\n`
+    content += `  ⬆️ 升级畅听: ${r.upgrade || '-'}\n`
+    content += `  ⏰ VIP到期: ${r.vipExpiry}`
+    if (r.remainDays != null) content += `（还剩 ${r.remainDays} 天${r.remainDays <= 3 ? ' ⚠️' : ''}）`
+    content += `\n`
     if (r.error) {
       content += `  ⚠️ 错误: ${r.error}\n`
+    }
+  }
+
+  // 异常账号单独高亮，便于快速定位处理
+  const failedAccounts = notifyResults.filter(r => r.error)
+  if (failedAccounts.length) {
+    content += `\n⚠️ 异常账号（${failedAccounts.length}）:\n`
+    for (const r of failedAccounts) {
+      content += `  - ${r.nickname}: ${r.error}\n`
     }
   }
 
