@@ -81,17 +81,14 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
    **3.1 二维码登录（推荐）**
 
    运行 Actions `二维码登录`，点击 Run。运行结束后：
-   - 到该次运行的 **Artifacts** 下载 `qr-bundle`（加密包 `qr_bundle.enc`）；
-   - 在本仓库根目录执行解密（口令即你的 `QR_PASS`）：
+   - 到该次运行的 **Artifacts** 下载 `qr-bundle`（zip 压缩包，内含加密的 `qr_bundle.enc`）；
+   - 使用一键解密工具打开（**无需安装任何环境**）：
+     - **Windows（推荐）**：直接使用仓库里编译好的 `tools/decrypt_qr.exe`。把下载的 **zip 压缩包**（或解压出的 `qr_bundle.enc`）**拖到 exe 上**，输入 `QR_PASS` 口令（不回显），解密后自动用系统照片查看器/浏览器打开二维码扫码。
+     - 如需自行编译：安装 MinGW-w64 后运行 `tools/build.bat`。
+     - **macOS/Linux 或其他平台**：`pip install pycryptodome` 后运行 `python tools/decrypt_qr.py <文件路径>`，或用 PyInstaller 打包为单文件：`pyinstaller -F tools/decrypt_qr.py`。
+   - 解密产物在输入文件同目录的 `qr_decrypted\`，扫码并确认登录即可（二维码约 2 分钟有效，请尽快操作）。
 
-     ```shell
-     # 方式一：环境变量传入口令
-     QR_PASS=你的口令 node decryptQr.js qr_bundle.enc
-     # 方式二：直接运行，按提示输入口令（不回显）
-     node decryptQr.js qr_bundle.enc
-     ```
-
-   - 解密后打开输出目录里的 `login.html`，用酷狗音乐 APP 扫码并确认登录即可（二维码约 2 分钟有效，请尽快）。
+   > 提示：也可用环境变量传口令（适合脚本/自动化）：`QR_PASS=你的口令 工具路径 文件路径`
 
    **3.2 手机号登录**
 
