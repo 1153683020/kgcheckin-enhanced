@@ -148,68 +148,80 @@ async function main() {
           }
         }
 
-        // 查询今日已领取 VIP 状态：product_type=tvip 为已领取未升级，svip 为已升级（目标）
-        // 其他 vip 状态（dvip/qvip 等）不做特殊处理，按未领取走完整流程
-        printYellow("查询今日已领取VIP状态...")
-        const unionRes = await send(`/youth/union/vip?timestrap=${Date.now()}`, "GET", headers)
-        const productType = unionRes?.status === 1 ? unionRes?.data?.product_type : null
+        // 先查 VIP 明细（/user/vip/detail），busi_vip 数组含 svip/tvip/dvip/qvip 等多项
+        // 决策规则：svip 仍在有效期内 → 无需领取/升级；tvip 有效 → 直接升级；都过期 → 领取+升级
+        let vip_details = await send(`/user/vip/detail?timestrap=${Date.now()}`, "GET", headers)
+        let busiVip = (vip_details?.status === 1 && Array.isArray(vip_details?.data?.busi_vip)) ? vip_details.data.busi_vip : []
+        const activeVipOf = (type) => busiVip.find(v => v?.product_type === type && v?.is_vip === 1 && (parseVipTime(v?.vip_end_time)?.getTime() || 0) > Date.now())
+        let activeSvip = activeVipOf('svip')
+        let activeTvip = activeVipOf('tvip')
+
         let dayVipStatus = '-'
         let upgradeStatus = '-'
 
-        if (productType === 'svip') {
-          // 目标已达成（已是畅听VIP），跳过领取与升级，减少不必要请求
-          printGreen("已是畅听VIP(svip)，无需领取与升级")
-          dayVipStatus = '已领取'
-          upgradeStatus = '已是svip'
+        if (activeSvip) {
+          // 目标已达成：svip 仍在有效期内，跳过领取与升级
+          printGreen(`畅听VIP(svip)仍在有效期内（至 ${activeSvip.vip_end_time}），无需领取与升级`)
+          dayVipStatus = 'svip有效'
+          upgradeStatus = 'svip有效'
         } else {
-          if (productType === 'tvip') {
-            // 已领取但未升级：跳过领取，直接升级
-            printYellow("已领取一天VIP(tvip)但未升级，直接升级")
-            dayVipStatus = '已领取'
+          let gotToday = false
+          if (activeTvip) {
+            printYellow("tvip 仍在有效期内，跳过领取，直接升级")
+            dayVipStatus = 'tvip有效'
           } else {
-            // 未领取（或其他类型）：领取一天概念版 VIP（receive_day 传当天；勿频繁调用、勿领多日）
+            // 领取一天概念版 VIP（receive_day 传当天；勿频繁调用、勿领多日）
             printYellow("领取一天概念VIP...")
             const receiveRes = await send(`/youth/day/vip?receive_day=${date}&timestrap=${Date.now()}`, "GET", headers)
             if (receiveRes.status === 1) {
               printGreen("一天概念VIP领取成功")
               dayVipStatus = '成功'
+              gotToday = true
             } else if (receiveRes.error_code === 131001) {
               // 131001：今日已签到领取，属正常情况而非失败
               printGreen("一天概念VIP今日已领取")
               dayVipStatus = '今日已领取'
+              gotToday = true
             } else {
               dayVipStatus = `失败(${bizErrDetail(receiveRes)})`
               printRed(`一天概念VIP领取失败：${bizErrDetail(receiveRes)}`)
             }
           }
 
-          // 升级为畅听 VIP（需先领取一天 VIP，有效期 24h）
-          printYellow("升级畅听VIP...")
-          const upgradeRes = await send(`/youth/day/vip/upgrade?timestrap=${Date.now()}`, "GET", headers)
-          const upgradeMsg = String(upgradeRes?.msg || upgradeRes?.error_msg || upgradeRes?.data?.msg || (typeof upgradeRes?.data === 'string' ? upgradeRes.data : '') || '')
-          if (upgradeRes.status === 1) {
-            printGreen("升级畅听VIP成功")
-            upgradeStatus = '成功'
-          } else if (/已(经)?领取/.test(upgradeMsg)) {
-            // “已经领取过升级vip奖励”等文案：今日已升级，属正常情况而非失败
-            printGreen(`升级畅听VIP：${upgradeMsg}`)
-            upgradeStatus = '今日已升级'
+          // 升级为畅听 VIP（需先领取一天 VIP，升级有效期 24h）
+          // 仅在领取流程走过（含今天已领取 131001）时才调用；297000=无需升级/奖励不存在，属正常
+          if (gotToday) {
+            printYellow("升级畅听VIP...")
+            const upgradeRes = await send(`/youth/day/vip/upgrade?timestrap=${Date.now()}`, "GET", headers)
+            const upgradeMsg = String(upgradeRes?.msg || upgradeRes?.error_msg || upgradeRes?.data?.msg || (typeof upgradeRes?.data === 'string' ? upgradeRes.data : '') || '')
+            if (upgradeRes.status === 1) {
+              printGreen("升级畅听VIP成功")
+              upgradeStatus = '成功'
+            } else if (upgradeRes.error_code === 297000 || /已(经)?领取|无需|不能升级/.test(upgradeMsg)) {
+              // 297000 等业务码：该账号当前无升级奖励可领（多为 svip 尚在有效期），属正常情况
+              printGreen(`升级畅听VIP：${upgradeMsg || '无需升级'}`)
+              upgradeStatus = '无需升级'
+            } else {
+              upgradeStatus = `失败(${bizErrDetail(upgradeRes)})`
+              printRed(`升级畅听VIP失败：${bizErrDetail(upgradeRes)}`)
+            }
           } else {
-            upgradeStatus = `失败(${bizErrDetail(upgradeRes)})`
-            printRed(`升级畅听VIP失败：${bizErrDetail(upgradeRes)}`)
+            upgradeStatus = '跳过'
           }
         }
 
+        // 展示用：优先 svip 到期时间，其次任何仍在有效的 vip 项
         let vipExpiry = '未知'
         let remainDays = null
-        const vip_details = await send(`/user/vip/detail?timestrap=${Date.now()}`, "GET", headers)
-        if (vip_details.status === 1 && Array.isArray(vip_details.data?.busi_vip) && vip_details.data.busi_vip.length > 0) {
-          vipExpiry = vip_details.data.busi_vip[0].vip_end_time
+        const effective = busiVip.filter(v => v?.is_vip === 1 && (parseVipTime(v?.vip_end_time)?.getTime() || 0) > Date.now())
+        const preferred = effective.find(v => v?.product_type === 'svip') || effective[0]
+        if (preferred) {
+          vipExpiry = preferred.vip_end_time
           remainDays = daysUntil(parseVipTime(vipExpiry))
           printBlue(`今天是：${date}`)
-          printBlue(`VIP到期时间：${vipExpiry}${remainDays != null ? `（还剩 ${remainDays} 天）` : ''}\n`)
+          printBlue(`VIP到期时间（${preferred.product_type}）：${vipExpiry}${remainDays != null ? `（还剩 ${remainDays} 天）` : ''}\n`)
         } else {
-          printRed("获取失败\n")
+          printRed("VIP到期时间获取失败\n")
           errorMsg[`${safeNickname} vip_details`] = summarizeResponse(vip_details)
           hasError = true
         }
