@@ -18,3 +18,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# 编译产物（仓库中保留预编译的 decrypt_qr.exe 供直接使用，其余 exe 不入库）
+tools/*.exe
+!tools/decrypt_qr.exe
+
