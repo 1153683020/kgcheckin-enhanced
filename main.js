@@ -2,6 +2,7 @@ import { printBlue, printGreen, printMagenta, printRed, printYellow } from "./ut
 import { hasSecretWriteToken, setRepoSecret } from "./utils/githubSecrets.js";
 import { maskDisplayName, maskIdentifier, sanitizeForLog, summarizeResponse } from "./utils/safeLog.js";
 import { sendNotify } from "./utils/notify.js";
+import { buildCheckinReport } from "./utils/notifyFormat.js";
 import { close_api, daysUntil, delay, parseVipTime, send, startService, waitForApi } from "./utils/utils.js";
 import { buildCookieHeader, ensureDfid } from "./utils/dfid.js";
 
@@ -161,14 +162,14 @@ async function main() {
 
         if (activeSvip) {
           // 目标已达成：svip 仍在有效期内，跳过领取与升级
-          printGreen(`畅听VIP(svip)仍在有效期内（至 ${activeSvip.vip_end_time}），无需领取与升级`)
-          dayVipStatus = 'svip有效'
-          upgradeStatus = 'svip有效'
+          printGreen(`超级VIP(svip)仍在有效期内（至 ${activeSvip.vip_end_time}），无需领取与升级`)
+          dayVipStatus = '超级VIP有效'
+          upgradeStatus = '超级VIP有效'
         } else {
           let gotToday = false
           if (activeTvip) {
             printYellow("tvip 仍在有效期内，跳过领取，直接升级")
-            dayVipStatus = 'tvip有效'
+            dayVipStatus = '畅听VIP有效'
           } else {
             // 领取一天概念版 VIP（receive_day 传当天；勿频繁调用、勿领多日）
             printYellow("领取一天概念VIP...")
@@ -188,22 +189,22 @@ async function main() {
             }
           }
 
-          // 升级为畅听 VIP（需先领取一天 VIP，升级有效期 24h）
+          // 升级为超级 VIP（需先领取一天 VIP，升级有效期 24h）
           // 仅在领取流程走过（含今天已领取 131001）时才调用；297000=无需升级/奖励不存在，属正常
           if (gotToday) {
-            printYellow("升级畅听VIP...")
+            printYellow("升级超级VIP...")
             const upgradeRes = await send(`/youth/day/vip/upgrade?timestrap=${Date.now()}`, "GET", headers)
             const upgradeMsg = String(upgradeRes?.msg || upgradeRes?.error_msg || upgradeRes?.data?.msg || (typeof upgradeRes?.data === 'string' ? upgradeRes.data : '') || '')
             if (upgradeRes.status === 1) {
-              printGreen("升级畅听VIP成功")
+              printGreen("升级超级VIP成功")
               upgradeStatus = '成功'
             } else if (upgradeRes.error_code === 297000 || /已(经)?领取|无需|不能升级/.test(upgradeMsg)) {
               // 297000 等业务码：该账号当前无升级奖励可领（多为 svip 尚在有效期），属正常情况
-              printGreen(`升级畅听VIP：${upgradeMsg || '无需升级'}`)
+              printGreen(`升级超级VIP：${upgradeMsg || '无需升级'}`)
               upgradeStatus = '无需升级'
             } else {
               upgradeStatus = `失败(${bizErrDetail(upgradeRes)})`
-              printRed(`升级畅听VIP失败：${bizErrDetail(upgradeRes)}`)
+              printRed(`升级超级VIP失败：${bizErrDetail(upgradeRes)}`)
             }
           } else {
             upgradeStatus = '跳过'
@@ -281,40 +282,7 @@ async function main() {
 
   // 构建通知内容（放在 secret 更新之后、错误抛出之前，确保始终执行）
   const title = `酷狗签到${hasError ? '异常' : '成功'} ${date}`
-  let content = `📅 日期: ${date}\n`
-  content += `📊 账号数: ${notifyResults.length}\n`
-  const successCount = notifyResults.filter(r => r.status === '成功').length
-  const failCount = notifyResults.length - successCount
-  content += `✅ 成功: ${successCount}  ❌ 失败: ${failCount}\n`
-
-  // 临期提醒：VIP 剩余 ≤3 天的账号置顶提示
-  const expiring = notifyResults.filter(r => r.remainDays != null && r.remainDays <= 3)
-  if (expiring.length) {
-    content += `⏳ 临期提醒（≤3天）: ` + expiring.map(r => `${r.nickname}(${r.remainDays}天)`).join('、') + `\n`
-  }
-
-  for (const r of notifyResults) {
-    content += `\n【${r.nickname}】\n`
-    content += `  🎵 听歌领取: ${r.listen}\n`
-    content += `  🎁 VIP领取: ${r.vipClaim} 次\n`
-    content += `  🎫 单日VIP: ${r.dayVip || '-'}\n`
-    content += `  ⬆️ 升级畅听: ${r.upgrade || '-'}\n`
-    content += `  ⏰ VIP到期: ${r.vipExpiry}`
-    if (r.remainDays != null) content += `（还剩 ${r.remainDays} 天${r.remainDays <= 3 ? ' ⚠️' : ''}）`
-    content += `\n`
-    if (r.error) {
-      content += `  ⚠️ 错误: ${r.error}\n`
-    }
-  }
-
-  // 异常账号单独高亮，便于快速定位处理
-  const failedAccounts = notifyResults.filter(r => r.error)
-  if (failedAccounts.length) {
-    content += `\n⚠️ 异常账号（${failedAccounts.length}）:\n`
-    for (const r of failedAccounts) {
-      content += `  - ${r.nickname}: ${r.error}\n`
-    }
-  }
+  const content = buildCheckinReport(date, notifyResults)
 
   // 发送通知（确保即使 secret 更新失败也能发出）
   try {

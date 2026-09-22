@@ -2,6 +2,7 @@ import { printBlue, printGreen, printRed, printYellow } from "./utils/colorOut.j
 import { hasSecretWriteToken, setRepoSecret } from "./utils/githubSecrets.js";
 import { maskDisplayName, maskIdentifier, summarizeResponse } from "./utils/safeLog.js";
 import { sendNotify } from "./utils/notify.js";
+import { buildAccountReport } from "./utils/notifyFormat.js";
 import { close_api, daysUntil, parseVipTime, send, startService, waitForApi } from "./utils/utils.js";
 import { buildCookieHeader, ensureDfid } from "./utils/dfid.js";
 
@@ -103,14 +104,9 @@ async function main() {
   // 汇总通知
   const okCount = results.filter(r => r.ok).length
   const title = `账号${isRefresh ? '登录刷新' : 'VIP 状态'} ${okCount}/${results.length} 成功`
-  let content = ''
-  for (const r of results) {
-    content += `${r.ok ? '✅' : '❌'} ${r.account}：${r.detail}`
-    if (r.remain != null) content += `（还剩 ${r.remain} 天${r.soon ? '，即将到期⚠️' : ''}）`
-    content += '\n'
-  }
+  let content = buildAccountReport(isRefresh ? 'refresh' : 'vip', results)
   if (errors.length) {
-    content += `\n⚠️ 异常 ${errors.length} 条：\n` + errors.map(e => `- ${e}`).join('\n')
+    content += `\n── 异常 ────────\n` + errors.map(e => `• ${e}`).join('\n')
   }
   try {
     await sendNotify(title, content)

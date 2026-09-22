@@ -2,7 +2,7 @@
 
 GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两天酷狗概念VIP`
 
-> 在原 [develop202/kgcheckin](https://github.com/develop202/kgcheckin) 基础上做防盗号安全加固，并增强领取流程（dfid 自动获取、单日VIP领取+升级畅听、账号管理等）。
+> 在原 [develop202/kgcheckin](https://github.com/develop202/kgcheckin) 基础上做防盗号安全加固，并增强领取流程（dfid 自动获取、单日VIP领取+升级超级VIP、账号管理等）。
 
 登录后即可使用，目前提供二维码登录(推荐)和手机号登录(一个手机号绑定多个账号无法登录，见 [多账号登录问题](https://github.com/MakcRe/KuGouMusicApi/issues/51))
 
@@ -96,7 +96,7 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
 
 1. 启用 Actions `签到`，每天凌晨北京时间 01:10 自动签到（可在 `签到.yml` 中设置 cron），签到前会随机延迟数分钟以错峰。启用 Actions `仓库保活` 以保证签到可以长期执行。
 
-   每次签到依次完成：听歌领取 → 8 次广告领取 → **领取一天概念版 VIP**（`/youth/day/vip`，`receive_day` 取当天）→ **升级畅听 VIP**（`/youth/day/vip/upgrade`，升级后约 24 小时有效，故需每日重复）。单日 VIP 与升级接口均为概念版测试接口，请遵循"勿频繁调用、勿领多日"的原则。
+   每次签到依次完成：听歌领取 → 8 次广告领取 → **领取一天畅听 VIP（tvip）**（`/youth/day/vip`，`receive_day` 取当天）→ **升级超级 VIP（svip）**（`/youth/day/vip/upgrade`，升级后约 24 小时有效）。决策以 `/user/vip/detail` 的 `busi_vip` 为准：svip 仍在有效期内则跳过领取与升级，tvip 有效但 svip 未激活则直接升级，均已过期才执行领取+升级。单日 VIP 与升级接口均为概念版测试接口，请遵循"勿频繁调用、勿领多日"的原则。
 
 1. 账号管理（新增）
 
@@ -130,7 +130,7 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
    | 邮箱 SMTP | `MAIL_PASS` | 发件邮箱授权码（非登录密码） |
    | 邮箱 SMTP | `MAIL_TO` | 收件邮箱地址 |
 
-   通知内容包含：运行日期、账号数量、成功/失败统计、各账号听歌领取状态、VIP 领取次数、单日 VIP 领取与畅听升级状态、VIP 到期时间与剩余天数（含临期提醒）、异常账号单独高亮等。
+   通知包含：签到结果总览、临期提醒置顶、各账号明细（听歌/广告领取、单日 VIP 领取与超级 VIP 升级状态、到期时间与剩余天数）、异常账号单独汇总等。
 
 API源代码来自 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi) ~~图省事直接搬来~~
 
