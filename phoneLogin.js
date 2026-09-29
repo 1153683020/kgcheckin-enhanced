@@ -10,6 +10,8 @@ async function login() {
   const code = process.env.CODE
   const USERINFO = process.env.USERINFO
   const APPEND_USER = process.env.APPEND_USER
+  // 一个手机号绑定多个酷狗账号时，必须指定要登录的账号 userid（酷狗接口要求）
+  const login_userid = process.env.LOGIN_USERID || ''
   const userinfo = (USERINFO && APPEND_USER == "是") ? JSON.parse(USERINFO) : []
 
   // 不使用二维码登录并且没有手机号或验证码
@@ -26,8 +28,8 @@ async function login() {
   }
 
   try {
-    // 手机号登录请求
-    const result = await send(`/login/cellphone?mobile=${phone}&code=${code}`, "GET", {})
+    // 手机号登录请求（多账号绑定同一手机号时需带 userid 指定账号）
+    const result = await send(`/login/cellphone?mobile=${phone}&code=${code}${login_userid ? `&userid=${login_userid}` : ''}`, "GET", {})
     if (result.status === 1) {
       printGreen("登录成功！")
       const loginUser = { userid: result.data.userid, token: result.data.token }
@@ -36,7 +38,7 @@ async function login() {
       upsertUser(userinfo, loginUser, APPEND_USER == "是")
       saveUserinfo(userinfo)
     } else if (result.error_code === 34175) {
-      throw new Error("暂不支持多账号绑定手机登录")
+      throw new Error("该手机号绑定了多个酷狗账号，请在运行时填写 LOGIN_USERID（要登录的账号 userid）后重试")
     } else {
       printRed("响应内容")
       console.dir(summarizeResponse(result), { depth: null })

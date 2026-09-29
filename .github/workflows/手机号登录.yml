@@ -18,6 +18,10 @@ on:
         options:
           - 是
           - 否
+      login_userid:
+        description: "要登录的账号 userid（仅当一个手机号绑定了多个酷狗账号时必填，否则留空）"
+        required: false
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -66,6 +70,7 @@ jobs:
         env:
           PHONE: ${{ secrets.PHONE }}
           CODE: ${{ secrets.CODE }}
+          LOGIN_USERID: ${{ github.event.inputs.login_userid }}
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           USERINFO: ${{ secrets.USERINFO }}
