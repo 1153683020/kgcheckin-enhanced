@@ -105,15 +105,6 @@ async function sendFeishu(title, content, key, secret) {
   const bizCode = data?.code ?? data?.StatusCode
   if (bizCode !== 0) {
     printRed(`飞书发送失败: ${data?.msg || data?.StatusMessage || `HTTP ${resp.status}`}`)
-    // 诊断：对比本地时间与飞书服务器时间，区分“时钟漂移”与“secret 不匹配”
-    const serverDate = resp.headers.get('date')
-    if (serverDate) {
-      const diffSec = Math.abs((Date.now() - new Date(serverDate).getTime()) / 1000)
-      printYellow(`诊断: 本地时间=${new Date().toISOString()} 飞书服务器时间=${serverDate}（相差约 ${Math.round(diffSec)} 秒）`)
-      if (diffSec > 1800) printYellow('  → 本地/runner 时钟与飞书服务器相差较大，timestamp 校验失败大概率由时钟漂移导致')
-      else printYellow('  → 时钟正常，签名校验失败大概率由 secret 不匹配导致（请重新复制飞书机器人的签名密钥到 FEISHU_SECRET）')
-    }
-    printYellow(`诊断: secret已配置=${Boolean(secret)} 签名算法=HMAC-SHA256(key=timestamp\\nsecret, 空内容)`)
     return false
   }
   return true
