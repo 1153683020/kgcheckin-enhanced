@@ -20,7 +20,22 @@ import { sendNotify } from "./utils/notify.js";
 import { close_api, send, startService, waitForApi } from "./utils/utils.js";
 
 const PROBES = [
-  { name: '网关链路(/user/detail 未登录态)', path: '/user/detail', ok: r => r?.error_code === 20018 },
+  // 全路由探活：每个 module 走一遍自己的签名/加密/URL 链路。
+  // 无登录态调用是零副作用的（服务端先校验登录即拒绝，不会真的执行业务）。
+  // expect 为各接口当前实测的"未登录错误码基线"：偏离/网络错误/404 即告警
+  // （能提前发现：签名失效、URL 下线、module 参数变动导致的错误码变化）。
+  { name: '用户详情 /user/detail', path: '/user/detail', expect: { error_code: 20018 } },
+  { name: '听歌领取 /youth/listen/song', path: '/youth/listen/song', expect: { error_code: 20002 } },
+  { name: '广告领取 /youth/vip', path: '/youth/vip', expect: { error_code: 20002 } },
+  { name: '单日VIP /youth/day/vip', path: '/youth/day/vip', expect: { error_code: 20002 } },
+  { name: '升级VIP /youth/day/vip/upgrade', path: '/youth/day/vip/upgrade', expect: { error_code: 20002 } },
+  { name: 'VIP明细 /user/vip/detail', path: '/user/vip/detail', expect: { error_code: 20010 } },
+  { name: '二维码密钥 /login/qr/key', path: '/login/qr/key', expect: { status: 1 } },
+  { name: '二维码校验 /login/qr/check', path: '/login/qr/check?key=probe', expect: { status: 1 } },
+  { name: '手机登录 /login/cellphone', path: '/login/cellphone?mobile=100&code=000000', expect: { error_code: 20010 } },
+  { name: '发送验证码 /captcha/sent', path: '/captcha/sent?mobile=100', expect: { error_code: 20010 } },
+  // 注意：/register/dev（设备注册）刻意不纳入探活——
+  // 每次调用会在服务端注册一个新设备，大量访问会积累垃圾设备记录导致风控
 ]
 
 function describeErr(res) {
@@ -33,6 +48,14 @@ function describeErr(res) {
   if (msg) parts.push(`msg=${msg}`)
   parts.push(`error_code=${res?.error_code ?? res?.status ?? '未知'}`)
   return parts.join(', ')
+}
+
+/** 基线匹配：接口响应的 error_code/status 与基线一致即视为链路正常 */
+function probePassed(probe, res) {
+  if (!res || typeof res !== 'object') return false
+  if (probe.expect.error_code !== undefined) return res.error_code === probe.expect.error_code
+  if (probe.expect.status !== undefined) return res.status === probe.expect.status
+  return false
 }
 
 async function main() {
@@ -48,8 +71,10 @@ async function main() {
   try {
     for (const probe of PROBES) {
       try {
-        const res = await send(`${probe.path}?timestrap=${Date.now()}`, 'GET', {})
-        if (probe.ok(res)) {
+        // path 已带 query 参数时用 & 拼接 timestrap
+        const sep = probe.path.includes('?') ? '&' : '?'
+        const res = await send(`${probe.path}${sep}timestrap=${Date.now()}`, 'GET', {})
+        if (probePassed(probe, res)) {
           printGreen(`探针正常: ${probe.name}`)
         } else {
           printRed(`探针异常: ${probe.name} -> ${describeErr(res)}`)
