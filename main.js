@@ -5,6 +5,7 @@ import { sendNotify } from "./utils/notify.js";
 import { buildCheckinReport } from "./utils/notifyFormat.js";
 import { close_api, daysUntil, delay, parseVipTime, send, startService, waitForApi } from "./utils/utils.js";
 import { buildCookieHeader, ensureDfid } from "./utils/dfid.js";
+import { CONSECUTIVE_FAIL_ALERT, commitState, loadState, saveState, updateFailCount } from "./utils/state.js";
 
 /**
  * 构造接口错误详情，便于排查：
@@ -31,6 +32,9 @@ async function main() {
     throw new Error("未配置")
   }
   const userinfo = JSON.parse(USERINFO)
+  // 失败连击状态（连续失败天数持久化，跨运行累计）
+  const state = loadState()
+  const stateBefore = JSON.stringify(state)
 
   // 启动服务并等待就绪（避免冷启动竞态导致首个请求失败）
   const api = startService()
@@ -86,6 +90,7 @@ async function main() {
             error: 'token过期或账号不存在'
           })
           hasError = true
+          updateFailCount(state, safeUserId, true)
           continue
         }
         const safeNickname = maskDisplayName(userDetail.data.nickname)
@@ -238,6 +243,8 @@ async function main() {
           remainDays,
           error: ''
         })
+        // 账号整体未全成功（听歌失败/广告未领到）也计入连续失败
+        updateFailCount(state, safeUserId, listenStatus === '失败' || claimCount === 0)
       } catch (err) {
         const safeUserId = maskIdentifier(user.userid || '未知')
         printRed(`账号 ${safeUserId} 处理异常：${err && err.message ? err.message : String(err)}`)
@@ -254,6 +261,7 @@ async function main() {
             error: err && err.message ? err.message : String(err)
           })
         hasError = true
+        updateFailCount(state, safeUserId, true)
         continue
       }
     }
@@ -282,13 +290,24 @@ async function main() {
 
   // 构建通知内容（放在 secret 更新之后、错误抛出之前，确保始终执行）
   const title = `酷狗签到${hasError ? '异常' : '成功'} ${date}`
-  const content = buildCheckinReport(date, notifyResults)
+  // 连续失败 >= 阈值的账号，升级为醒目告警区块
+  const consecutiveFails = {}
+  for (const [key, count] of Object.entries(state)) {
+    if (Number(count) >= CONSECUTIVE_FAIL_ALERT) consecutiveFails[key] = Number(count)
+  }
+  const content = buildCheckinReport(date, notifyResults, consecutiveFails)
 
   // 发送通知（确保即使 secret 更新失败也能发出）
   try {
     await sendNotify(title, content)
   } catch (e) {
     printYellow(`通知发送异常: ${e.message}`)
+  }
+
+  // 失败连击状态变化时持久化并提交（正常全成功且无历史失败时不产生提交）
+  if (JSON.stringify(state) !== stateBefore) {
+    saveState(state)
+    commitState(`chore: 更新签到失败状态 ${date}`)
   }
 
   if (Object.keys(errorMsg).length > 0) {
@@ -303,4 +322,4 @@ async function main() {
 
 }
 
-main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1) })
+main().then(async () => { await new Promise(r => setTimeout(r, 300)); process.exit(0) }).catch(e => { console.error(e); process.exit(1) })

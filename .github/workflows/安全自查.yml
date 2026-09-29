@@ -1,14 +1,12 @@
-name: 签到
+name: 安全自查
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '10 17 * * *'
 permissions:
-  contents: write
+  contents: read
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -18,6 +16,16 @@ jobs:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: ./api/package-lock.json
+      - name: 检查 GitHub CLI
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh -y
+          fi
+          gh --version
       - name: 缓存依赖
         id: cache-npm
         uses: actions/cache@v4
@@ -29,35 +37,22 @@ jobs:
       - name: 安装依赖
         run: npm run install
         if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
-      # 错峰随机延迟：避免大量 fork 在同一时刻集中请求酷狗接口被风控
-      - name: 错峰随机延迟
-        run: |
-          DELAY=$((RANDOM % 600))
-          echo "随机延迟 ${DELAY} 秒后执行签到"
-          sleep "$DELAY"
-      - name: 执行签到
-        run: npm run main
+      # 检查：仓库可见性（需要 GH_TOKEN 查询）、PAT 形状、QR_PASS、账号 token 健康度、通知渠道
+      - name: 执行安全自查
+        run: node security-check.js
         env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          QR_PASS: ${{ secrets.QR_PASS }}
           USERINFO: ${{ secrets.USERINFO }}
           PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          # 通知渠道（按需配置，全部可选）
           WECOM_BOT_KEY: ${{ secrets.WECOM_BOT_KEY }}
           DINGTALK_BOT_KEY: ${{ secrets.DINGTALK_BOT_KEY }}
-          DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
           FEISHU_BOT_KEY: ${{ secrets.FEISHU_BOT_KEY }}
-          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
           YUNHU_BOT_KEY: ${{ secrets.YUNHU_BOT_KEY }}
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          PUSHPLUS_TOPIC: ${{ secrets.PUSHPLUS_TOPIC }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           BARK_KEY: ${{ secrets.BARK_KEY }}
-          BARK_GROUP: ${{ secrets.BARK_GROUP }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           MAIL_HOST: ${{ secrets.MAIL_HOST }}
-          MAIL_PORT: ${{ secrets.MAIL_PORT }}
-          MAIL_USER: ${{ secrets.MAIL_USER }}
-          MAIL_PASS: ${{ secrets.MAIL_PASS }}
-          MAIL_TO: ${{ secrets.MAIL_TO }}

@@ -14,8 +14,9 @@ function shortDate(s) {
  * 签到日报
  * @param {string} date  北京时间日期 'YYYY-MM-DD'
  * @param {Array} results  { nickname, status, listen, vipClaim, dayVip, upgrade, vipExpiry, remainDays, error }
+ * @param {object|null} consecutive 连续失败告警 { 账号标识: 连续失败天数 }
  */
-function buildCheckinReport(date, results) {
+function buildCheckinReport(date, results, consecutive) {
   const total = results.length
   const okCount = results.filter(r => r.status === '成功').length
   const icon = okCount === total ? '✅' : okCount === 0 ? '❌' : '⚠️'
@@ -25,6 +26,15 @@ function buildCheckinReport(date, results) {
     `📋 酷狗签到 ｜ ${date}`,
     `${icon} ${headline}（${okCount}/${total}）`,
   ]
+
+  // 连续失败告警（置顶于明细前，最醒目）
+  if (consecutive && Object.keys(consecutive).length) {
+    lines.push('')
+    lines.push('🔥 连续失败告警')
+    for (const [key, c] of Object.entries(consecutive)) {
+      lines.push(`• ${key}：已连续失败 ${c} 天，请尽快检查（token 可能已过期）`)
+    }
+  }
 
   // 临期提醒（超级VIP ≤3 天）
   const expiring = results.filter(r => r.remainDays != null && r.remainDays <= 3)

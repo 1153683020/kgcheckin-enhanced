@@ -9,6 +9,8 @@
     "sent": "node sent.js",
     "qrcodeLogin": "node qrcodeLogin.js",
     "account": "node account.js",
+    "healthcheck": "node healthcheck.js",
+    "securityCheck": "node security-check.js",
     "decryptQr": "node decryptQr.js"
   },
   "dependencies": {

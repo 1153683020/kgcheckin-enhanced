@@ -1,14 +1,15 @@
-name: 签到
+name: 接口探活
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '10 17 * * *'
+    # 每天中午北京时间 12:00 探活一次（与凌晨签到错开，失败可提前预警）
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -29,19 +30,11 @@ jobs:
       - name: 安装依赖
         run: npm run install
         if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
-      # 错峰随机延迟：避免大量 fork 在同一时刻集中请求酷狗接口被风控
-      - name: 错峰随机延迟
-        run: |
-          DELAY=$((RANDOM % 600))
-          echo "随机延迟 ${DELAY} 秒后执行签到"
-          sleep "$DELAY"
-      - name: 执行签到
-        run: npm run main
+      # 探针走完整链路（本地服务 + 签名/加密 + 真实请求酷狗），无需登录态
+      # 全部正常时静默结束；任一失败则推送告警并以非零退出（Actions 会标红）
+      - name: 执行探活
+        run: node healthcheck.js
         env:
-          USERINFO: ${{ secrets.USERINFO }}
-          PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          # 通知渠道（按需配置，全部可选）
           WECOM_BOT_KEY: ${{ secrets.WECOM_BOT_KEY }}
           DINGTALK_BOT_KEY: ${{ secrets.DINGTALK_BOT_KEY }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
