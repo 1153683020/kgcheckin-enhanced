@@ -19,7 +19,7 @@ on:
           - 是
           - 否
       login_userid:
-        description: "要登录的账号 userid（仅当一个手机号绑定了多个酷狗账号时必填，否则留空）"
+        description: "要登录的账号 userid（仅『登录』步骤且一个手机号绑定多个账号时填写；『发送验证码』步骤忽略此项，普通场景留空）"
         required: false
         default: ""
 permissions:
