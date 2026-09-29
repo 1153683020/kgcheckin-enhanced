@@ -2,23 +2,25 @@
  * 酷狗接口探活哨兵
  *
  * 目的：酷狗改版（签名/URL/风控）后，通常表现为"次日签到失败才发现"。
- * 本脚本每天定时跑一次，用【无需登录】的探针接口走完整链路
+ * 本脚本每天定时跑一次，用【零副作用】探针走完整链路
  * （本地 api 服务 + 签名/加密 + 真实请求酷狗），提前发现接口异常。
  *
- * 探针选择（均已验证无需登录即可调用）：
- *   1. /login/qr/key   扫码登录密钥下发，返回 qrcode
- *   2. /register/dev   设备注册，返回 dfid（覆盖加密/签名链路）
+ * 探针选择（零副作用，避免被风控）：
+ *   /user/detail 不带登录态调用：酷狗返回 error_code=20018（未登录）
+ *   即可证明签名校验通过、URL 正确、服务端正常响应。
+ *   ——不注册设备、不生成二维码 key，不留任何服务端记录。
+ *   （注意：不要用 /register/dev 做探针，它每次会注册一个新设备，
+ *    大量访问会积累垃圾设备记录导致风控）
  *
- * 行为：全部正常 → 静默结束（不发通知）；
- *       任一探针失败（含网络错误）→ 推送告警通知并以非零退出。
+ * 行为：探针正常 → 静默结束（不发通知）；
+ *       探针异常（含网络错误/签名失效）→ 推送告警通知并以非零退出。
  */
 import { printGreen, printRed, printYellow } from "./utils/colorOut.js";
 import { sendNotify } from "./utils/notify.js";
 import { close_api, send, startService, waitForApi } from "./utils/utils.js";
 
 const PROBES = [
-  { name: '二维码密钥(/login/qr/key)', path: '/login/qr/key', ok: r => r?.status === 1 && !!r?.data?.qrcode },
-  { name: '设备注册(/register/dev)', path: '/register/dev', ok: r => r?.status === 1 && !!r?.data?.dfid },
+  { name: '网关链路(/user/detail 未登录态)', path: '/user/detail', ok: r => r?.error_code === 20018 },
 ]
 
 function describeErr(res) {
