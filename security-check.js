@@ -12,7 +12,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import { printGreen, printRed, printYellow } from './utils/colorOut.js';
+import { printYellow } from './utils/colorOut.js';
 import { maskIdentifier, sanitizeForLog } from './utils/safeLog.js';
 import { sendNotify } from './utils/notify.js';
 import { close_api, send, startService, waitForApi } from './utils/utils.js';

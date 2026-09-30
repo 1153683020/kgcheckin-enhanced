@@ -5,7 +5,7 @@ import { sendNotify } from "./utils/notify.js";
 import { buildCheckinReport } from "./utils/notifyFormat.js";
 import { close_api, daysUntil, delay, parseVipTime, send, startService, waitForApi } from "./utils/utils.js";
 import { buildCookieHeader, ensureDfid } from "./utils/dfid.js";
-import { CONSECUTIVE_FAIL_ALERT, commitState, loadState, saveState, updateFailCount } from "./utils/state.js";
+import { CONSECUTIVE_FAIL_ALERT, loadState, saveState, updateFailCount } from "./utils/state.js";
 
 /**
  * 构造接口错误详情，便于排查：
@@ -305,10 +305,9 @@ async function main() {
     printYellow(`通知发送异常: ${e.message}`)
   }
 
-  // 失败连击状态变化时持久化并提交（正常全成功且无历史失败时不产生提交）
+  // 失败连击状态变化时持久化（Actions 里自动写回 repository variable，不产生 git 提交）
   if (JSON.stringify(state) !== stateBefore) {
     saveState(state)
-    commitState(`chore: 更新签到失败状态 ${date}`)
   }
 
   if (Object.keys(errorMsg).length > 0) {

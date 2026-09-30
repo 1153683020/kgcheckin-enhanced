@@ -1,4 +1,4 @@
-import { close_api, delay, send, startService, waitForApi } from "./utils/utils.js";
+import { close_api, send, startService, waitForApi } from "./utils/utils.js";
 import { summarizeResponse } from "./utils/safeLog.js";
 
 async function login() {

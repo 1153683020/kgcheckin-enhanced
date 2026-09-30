@@ -26,4 +26,25 @@ function setRepoSecret(name, value) {
   });
 }
 
-export { hasSecretWriteToken, setRepoSecret };
+function deleteSecret(name) {
+  const repository = process.env.GITHUB_REPOSITORY;
+  const token = process.env.GH_TOKEN || process.env.PAT;
+
+  if (!repository) {
+    throw new Error("GITHUB_REPOSITORY 未配置");
+  }
+  if (!token) {
+    throw new Error("PAT/GH_TOKEN 未配置");
+  }
+
+  execFileSync("gh", ["secret", "delete", name, "--repo", repository], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GH_TOKEN: token,
+    },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+export { hasSecretWriteToken, setRepoSecret, deleteSecret };

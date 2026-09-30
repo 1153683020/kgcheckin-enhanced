@@ -41,6 +41,8 @@ jobs:
           USERINFO: ${{ secrets.USERINFO }}
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # 失败连击状态（repository variable，读入用于跨运行累计）
+          CHECKIN_STATE: ${{ vars.CHECKIN_STATE }}
           # 通知渠道（按需配置，全部可选）
           WECOM_BOT_KEY: ${{ secrets.WECOM_BOT_KEY }}
           DINGTALK_BOT_KEY: ${{ secrets.DINGTALK_BOT_KEY }}

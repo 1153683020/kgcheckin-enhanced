@@ -1,0 +1,27 @@
+name: lint
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+      - name: 创建 Node 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      # 仅安装根依赖（eslint），单测用 node:test 零依赖，无需 api/node_modules
+      - name: 安装依赖
+        run: npm install --no-audit --no-fund
+      # 静态检查：no-undef 可在 push 前抓到未定义变量（作用域拼错）等 node --check 查不出的错误
+      - name: ESLint
+        run: npm run lint
+      - name: 单元测试
+        run: npm test

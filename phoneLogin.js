@@ -1,8 +1,9 @@
-import { printGreen, printRed, printYellow } from "./utils/colorOut.js";
-import { sanitizeForLog, summarizeResponse } from "./utils/safeLog.js";
+import { printGreen, printRed } from "./utils/colorOut.js";
+import { summarizeResponse } from "./utils/safeLog.js";
 import { upsertUser, saveUserinfo } from "./utils/userinfo.js";
 import { ensureDfid } from "./utils/dfid.js";
-import { close_api, delay, send, startService, waitForApi } from "./utils/utils.js";
+import { deleteSecret } from "./utils/githubSecrets.js";
+import { close_api, send, startService, waitForApi } from "./utils/utils.js";
 
 async function login() {
 
@@ -37,6 +38,16 @@ async function login() {
       await ensureDfid(loginUser)
       upsertUser(userinfo, loginUser, APPEND_USER == "是")
       saveUserinfo(userinfo)
+
+      // 验证码为短效凭证，登录成功后自动清理 Secret CODE，减少敏感残留
+      if (process.env.GITHUB_ACTIONS && process.env.CODE) {
+        try {
+          deleteSecret('CODE')
+          printGreen('已自动清理 Secret CODE（验证码用后即弃）')
+        } catch (e) {
+          printRed(`清理 Secret CODE 失败（不影响使用，可手动删除）: ${e?.message || e}`)
+        }
+      }
     } else if (result.error_code === 34175) {
       throw new Error("该手机号绑定了多个酷狗账号，请在运行时填写 LOGIN_USERID（要登录的账号 userid）后重试")
     } else {

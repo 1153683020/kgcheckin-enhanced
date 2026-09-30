@@ -11,9 +11,14 @@
     "account": "node account.js",
     "healthcheck": "node healthcheck.js",
     "securityCheck": "node security-check.js",
-    "decryptQr": "node decryptQr.js"
+    "decryptQr": "node decryptQr.js",
+    "test": "node --test",
+    "lint": "eslint ."
   },
   "dependencies": {
     "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "eslint": "^10.11.0"
   }
 }

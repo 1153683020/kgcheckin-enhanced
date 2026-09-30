@@ -19,7 +19,7 @@ async function waitForApi(base = 'http://127.0.0.1:3000', timeoutMs = 20000) {
     try {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 2000)
-      const resp = await fetch(base + '/user/detail', { method: 'GET', signal: controller.signal })
+      await fetch(base + '/user/detail', { method: 'GET', signal: controller.signal })
       clearTimeout(timer)
       // 任意 HTTP 响应（含 4xx/5xx）都说明服务已在监听端口
       return true
