@@ -94,6 +94,7 @@ async function main() {
           continue
         }
         const safeNickname = maskDisplayName(userDetail.data.nickname)
+        const safeUserId = maskIdentifier(user.userid)
         printMagenta(`账号 ${safeNickname} 开始领取VIP...`)
 
         // 周日刷新token
