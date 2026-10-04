@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: 检出仓库
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: 创建 Node 环境
         uses: actions/setup-node@v4
         with:
