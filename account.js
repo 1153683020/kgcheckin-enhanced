@@ -13,9 +13,40 @@ async function main() {
   const USERINFO = process.env.USERINFO
   if (!USERINFO) throw new Error("未配置 Secret USERINFO")
   const userinfo = JSON.parse(USERINFO)
-  // 支持 env OPERATION 或命令行参数：refresh | vip（默认 vip）
+  // 支持 env OPERATION 或命令行参数：refresh | vip | remove（默认 vip）
   const operation = String(process.env.OPERATION || process.argv[2] || 'vip').toLowerCase()
   const isRefresh = operation === 'refresh'
+
+  // remove：从 USERINFO 中移除指定账号（不需要启动 api 服务）
+  if (operation === 'remove') {
+    const removeList = String(process.env.REMOVE_USERID || '').split(/[,，\s]+/).filter(Boolean)
+    if (!removeList.length) throw new Error("未指定 REMOVE_USERID（要移除的账号 userid）")
+    const kept = userinfo.filter(u => !removeList.includes(String(u.userid)))
+    const removedCount = userinfo.length - kept.length
+    if (removedCount === 0) {
+      printYellow('未找到要移除的账号（userid 不匹配），USERINFO 未变更')
+      return
+    }
+    if (hasSecretWriteToken()) {
+      try {
+        setRepoSecret('USERINFO', JSON.stringify(kept))
+        printGreen(`已移除 ${removedCount} 个账号，secret <USERINFO> 已更新，剩余 ${kept.length} 个`)
+      } catch (e) {
+        throw new Error("写回 USERINFO 失败，移除未生效")
+      }
+    } else {
+      printYellow('未配置 PAT，无法自动回写 USERINFO，移除未生效')
+      throw new Error("未配置 PAT，移除操作未生效")
+    }
+    const title = `账号移除 ${removedCount} 个`
+    const content = `已移除账号（userid 打码）：\n${removeList.map(id => maskIdentifier(id)).join('\n')}\n剩余 ${kept.length} 个账号`
+    try {
+      await sendNotify(title, content)
+    } catch (e) {
+      printYellow(`通知发送异常: ${e.message}`)
+    }
+    return
+  }
 
   const api = startService()
   try {
@@ -109,7 +140,7 @@ async function main() {
     content += `\n── 异常 ────────\n` + errors.map(e => `• ${e}`).join('\n')
   }
   try {
-    await sendNotify(title, content)
+    await sendNotify(title, content, { isFailure: errors.length > 0 || okCount < results.length })
   } catch (e) {
     printYellow(`通知发送异常: ${e.message}`)
   }

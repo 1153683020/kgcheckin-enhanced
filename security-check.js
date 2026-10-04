@@ -12,6 +12,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { printYellow } from './utils/colorOut.js';
 import { maskIdentifier, sanitizeForLog } from './utils/safeLog.js';
 import { sendNotify } from './utils/notify.js';
@@ -45,6 +46,8 @@ function patShape(pat) {
   if (/^(ghp_|gho_)/.test(pat)) return { level: 'warn', text: 'classic PAT：权限覆盖所有仓库，泄露风险大。建议改用 fine-grained（仅授权本仓库、仅 Secrets 读写）' }
   return { level: 'warn', text: '无法识别的 PAT 形状，请确认是否为有效的 GitHub 令牌' }
 }
+
+export { patShape }
 
 async function main() {
   const items = []
@@ -146,4 +149,7 @@ async function main() {
   }
 }
 
-main().then(async () => { await new Promise(r => setTimeout(r, 300)); process.exit(0) }).catch(e => { console.error(e); process.exit(1) })
+// 仅作为 CLI 直接运行时执行 main（被测试 import 时不触发）
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().then(async () => { await new Promise(r => setTimeout(r, 300)); process.exit(0) }).catch(e => { console.error(e); process.exit(1) })
+}

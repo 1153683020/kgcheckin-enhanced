@@ -5,25 +5,22 @@
  * 本脚本每天定时跑一次，用【零副作用】探针走完整链路
  * （本地 api 服务 + 签名/加密 + 真实请求酷狗），提前发现接口异常。
  *
- * 探针选择（零副作用，避免被风控）：
- *   /user/detail 不带登录态调用：酷狗返回 error_code=20018（未登录）
- *   即可证明签名校验通过、URL 正确、服务端正常响应。
- *   ——不注册设备、不生成二维码 key，不留任何服务端记录。
- *   （注意：不要用 /register/dev 做探针，它每次会注册一个新设备，
- *    大量访问会积累垃圾设备记录导致风控）
+ * 探针：全路由（除 /register/dev——每次调用会注册一个新设备，有真实副作用）。
+ * 无登录态调用是零副作用的（服务端先校验登录即拒绝，不会真的执行业务）。
+ *
+ * 基线：expect 为各接口当前实测的"未登录错误码"。
+ * 可通过 Repository Variable `PROBE_BASELINE`（JSON 数组）覆盖内置默认——
+ * 酷狗单方面改错误码时更新 variable 即可，无需改代码。
  *
  * 行为：探针正常 → 静默结束（不发通知）；
  *       探针异常（含网络错误/签名失效）→ 推送告警通知并以非零退出。
  */
 import { printGreen, printRed, printYellow } from "./utils/colorOut.js";
 import { sendNotify } from "./utils/notify.js";
+import { describeErr, probePassed } from "./utils/probe.js";
 import { close_api, send, startService, waitForApi } from "./utils/utils.js";
 
-const PROBES = [
-  // 全路由探活：每个 module 走一遍自己的签名/加密/URL 链路。
-  // 无登录态调用是零副作用的（服务端先校验登录即拒绝，不会真的执行业务）。
-  // expect 为各接口当前实测的"未登录错误码基线"：偏离/网络错误/404 即告警
-  // （能提前发现：签名失效、URL 下线、module 参数变动导致的错误码变化）。
+const DEFAULT_PROBES = [
   { name: '用户详情 /user/detail', path: '/user/detail', expect: { error_code: 20018 } },
   { name: '听歌领取 /youth/listen/song', path: '/youth/listen/song', expect: { error_code: 20002 } },
   { name: '广告领取 /youth/vip', path: '/youth/vip', expect: { error_code: 20002 } },
@@ -34,28 +31,23 @@ const PROBES = [
   { name: '二维码校验 /login/qr/check', path: '/login/qr/check?key=probe', expect: { status: 1 } },
   { name: '手机登录 /login/cellphone', path: '/login/cellphone?mobile=100&code=000000', expect: { error_code: 20010 } },
   { name: '发送验证码 /captcha/sent', path: '/captcha/sent?mobile=100', expect: { error_code: 20010 } },
-  // 注意：/register/dev（设备注册）刻意不纳入探活——
-  // 每次调用会在服务端注册一个新设备，大量访问会积累垃圾设备记录导致风控
 ]
 
-function describeErr(res) {
-  const parts = []
-  const data = res?.data
-  if (data != null && data !== '' && (typeof data !== 'object' || Object.keys(data).length > 0)) {
-    parts.push(`data=${typeof data === 'object' ? JSON.stringify(data) : data}`)
+/** 读取探针基线：Repository Variable `PROBE_BASELINE`（JSON 数组）优先，缺失/非法时用内置默认 */
+function loadProbes() {
+  const raw = process.env.PROBE_BASELINE
+  if (!raw) return DEFAULT_PROBES
+  try {
+    const custom = JSON.parse(raw)
+    if (Array.isArray(custom) && custom.length && custom.every(p => p?.name && p?.path && p?.expect)) {
+      printYellow('使用 repository variable PROBE_BASELINE 中的自定义基线')
+      return custom
+    }
+    printYellow('PROBE_BASELINE 格式不合法（需 JSON 数组，每项含 name/path/expect），回退内置默认')
+  } catch {
+    printYellow('PROBE_BASELINE 解析失败，回退内置默认基线')
   }
-  const msg = res?.msg || res?.error_msg
-  if (msg) parts.push(`msg=${msg}`)
-  parts.push(`error_code=${res?.error_code ?? res?.status ?? '未知'}`)
-  return parts.join(', ')
-}
-
-/** 基线匹配：接口响应的 error_code/status 与基线一致即视为链路正常 */
-function probePassed(probe, res) {
-  if (!res || typeof res !== 'object') return false
-  if (probe.expect.error_code !== undefined) return res.error_code === probe.expect.error_code
-  if (probe.expect.status !== undefined) return res.status === probe.expect.status
-  return false
+  return DEFAULT_PROBES
 }
 
 async function main() {
@@ -67,9 +59,10 @@ async function main() {
     throw e
   }
 
+  const probes = loadProbes()
   const fails = []
   try {
-    for (const probe of PROBES) {
+    for (const probe of probes) {
       try {
         // path 已带 query 参数时用 & 拼接 timestrap
         const sep = probe.path.includes('?') ? '&' : '?'
@@ -94,14 +87,14 @@ async function main() {
     return
   }
 
-  const title = `⚠️ 酷狗接口探活异常（${fails.length}/${PROBES.length}）`
+  const title = `⚠️ 酷狗接口探活异常（${fails.length}/${probes.length}）`
   const date = new Date()
   date.setTime(date.getTime() + 8 * 60 * 60 * 1000)
   const dateStr = date.toISOString().slice(0, 16).replace('T', ' ')
   let content = `🕐 探活时间: ${dateStr}\n\n今日自动签到可能失败，请关注下次签到结果。\n\n异常详情:\n`
   for (const f of fails) content += `• ${f}\n`
   try {
-    await sendNotify(title, content)
+    await sendNotify(title, content, { isFailure: true })
   } catch (e) {
     printYellow(`通知发送异常: ${e.message}`)
   }

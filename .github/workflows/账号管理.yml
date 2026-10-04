@@ -3,13 +3,18 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "操作类型（vip=查询各账号VIP状态；refresh=刷新登录token）"
+        description: "操作类型（vip=查询各账号VIP状态；refresh=刷新登录token；remove=移除指定账号）"
         required: true
         type: choice
         default: "vip"
         options:
           - vip
           - refresh
+          - remove
+      remove_userid:
+        description: "要移除的账号 userid（仅 remove 操作需要，多个用英文逗号分隔）"
+        required: false
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -52,6 +57,7 @@ jobs:
         run: node account.js
         env:
           OPERATION: ${{ github.event.inputs.operation }}
+          REMOVE_USERID: ${{ github.event.inputs.remove_userid }}
           USERINFO: ${{ secrets.USERINFO }}
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}

@@ -31,10 +31,12 @@ jobs:
         run: npm run install
         if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
       # 探针走完整链路（本地服务 + 签名/加密 + 真实请求酷狗），无需登录态
+      # 基线可通过 Repository Variable PROBE_BASELINE（JSON 数组）自定义覆盖
       # 全部正常时静默结束；任一失败则推送告警并以非零退出（Actions 会标红）
       - name: 执行探活
         run: node healthcheck.js
         env:
+          PROBE_BASELINE: ${{ vars.PROBE_BASELINE }}
           WECOM_BOT_KEY: ${{ secrets.WECOM_BOT_KEY }}
           DINGTALK_BOT_KEY: ${{ secrets.DINGTALK_BOT_KEY }}
           DINGTALK_SECRET: ${{ secrets.DINGTALK_SECRET }}
