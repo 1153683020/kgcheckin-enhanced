@@ -1,10 +1,10 @@
 # 酷狗签到增强版
 
-GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两天酷狗概念VIP`
+GitHub Actions 实现 `酷狗概念VIP` 自动签到：每天完成 听歌领取 → 广告领取 → 领取一天畅听VIP（tvip）→ 升级超级VIP（svip，约 24 小时有效）的完整领取链路。
 
 > 在原 [develop202/kgcheckin](https://github.com/develop202/kgcheckin) 基础上做防盗号安全加固，并增强领取流程（dfid 自动获取、单日VIP领取+升级超级VIP、账号管理等）。
 
-登录后即可使用，目前提供二维码登录(推荐)和手机号登录(一个手机号绑定多个账号无法登录，见 [多账号登录问题](https://github.com/MakcRe/KuGouMusicApi/issues/51))
+登录后即可使用，提供二维码登录(推荐)和手机号登录（一个手机号绑定多个账号时需填写要登录的账号 userid，详见 [多账号登录问题](https://github.com/MakcRe/KuGouMusicApi/issues/51)）。
 
 > [!warning]
 > **本项目已做防盗号安全加固**。登录二维码、登录态 token 均不再出现在任何公开可见的 Release / 明文 artifact / Actions 日志中。详见下方「安全说明」。**建议将 fork 后的仓库设为 Private（私有）**，可从根本上避免日志/artifact 被他人查看。
@@ -19,7 +19,7 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
 | `账号管理` | 手动 | `vip` 查询各账号VIP状态；`refresh` 刷新登录token并回写；`remove` 移除指定账号 |
 | `接口探活` | 每天 12:00 自动 + 手动 | 全路由零副作用探活，提前发现酷狗改版/签名失效 |
 | `安全自查` | 手动 | 配置体检：仓库可见性/PAT/QR_PASS/token健康度/通知渠道 |
-| `lint` | push/PR 自动 | ESLint 静态检查（防未定义变量等）+ 单元测试（19 项） |
+| `lint` | push/PR 自动 | ESLint 静态检查（防未定义变量等）+ 单元测试（29 项） |
 | `仓库保活` | 每月 1 号自动 | 空提交保活，避免 Actions 被自动禁用 |
 
 ## 免责声明
@@ -48,8 +48,8 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
    - 日志中的手机号、token、二维码 key、昵称、userid 等均做脱敏/打码。
 
 3. **PAT 改为可选 + 最小权限指引**
-   - PAT 仅用于把登录态写回 Secret `USERINFO`、以及刷新 token 后回写，**不配置也能用**（登录成功后跳过时会有提示）。
-   - 如需配置，请务必使用 **Fine-grained token**，仅授权当前 fork 仓库，仅给 `Secrets` 读写权限，并设置较短有效期（见下文步骤 2）。
+   - PAT 仅用于把登录态写回 Secret `USERINFO`、刷新 token 后回写、以及失败连击状态写回 repository variable，**不配置也能用**（登录成功后跳过时会有提示）。
+   - 如需配置，请务必使用 **Fine-grained token**，仅授权当前 fork 仓库，仅给 `Secrets` 读写 + `Variables` 读写权限，并设置较短有效期（见下文步骤 2）。
 
 4. **Workflow 权限收紧**
    - 各 workflow 仅保留最小权限（登录/签到/账号管理为 `contents: read`；仅“仓库保活”需要 `contents: write`）。
@@ -79,12 +79,12 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
       **Token name 备注**：随意填写
       **Expiration (有效期)**：建议自定义较短有效期，勿长期不维护
       **Repository access (仓库范围)**：只选择当前 fork 的仓库
-      **Repository permissions (仓库权限)**：`Metadata` 保持只读，`Secrets` 设置为读写
+      **Repository permissions (仓库权限)**：`Metadata` 保持只读，`Secrets` 设置为读写，`Variables` 设置为读写
       ![精细化个人访问令牌权限](imgs/精细化个人访问令牌权限.png)
    - 滑动到底部，点击绿色的 Generate token 保存按钮
    - 复制生成的字符串，回到本仓库添加到 `Secret`，变量名 `PAT`，value 为复制的令牌
 
-   > 不配置 `PAT` 也可以正常使用：登录成功/刷新 token 后无法自动回写 `USERINFO`，届时按提示改为设私有仓库或手动维护即可。
+   > 不配置 `PAT` 也可以正常使用：登录成功/刷新 token 后无法自动回写 `USERINFO`、失败连击状态无法跨运行累计，届时按提示改为设私有仓库或手动维护即可。
 
 1. 设置二维码加密口令
    - 在仓库 Secret 添加 `QR_PASS`，值为一段你自己记得住的口令（用于加密/解密扫码登录二维码）。**务必设置**，否则二维码登录会被中止以保护账号。
@@ -109,7 +109,7 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
 
    **多账号绑定同一手机号**：如果一个手机号绑定了多个酷狗账号，直接登录会报 `34175` 错误。此时在运行时的输入框 `login_userid` 中填写**要登录的那个账号的 userid**（在酷狗音乐 APP「我的 → 设置/个人主页」中可查看自己的 ID），再重新登录即可。普通单账号场景无需填写。验证码为短效凭证，登录成功后会**自动清理 Secret `CODE`**。
 
-1. 启用 Actions `签到`，每天凌晨北京时间 01:10 自动签到（可在 `签到.yml` 中设置 cron），签到前会随机延迟数分钟以错峰。启用 Actions `仓库保活` 以保证签到可以长期执行。
+1. 启用 Actions `签到`，每天凌晨北京时间 01:10 自动签到（可在 `签到.yml` 中设置 cron），签到前会随机延迟数分钟以错峰；多账号默认 2 个并行（可用 `CHECKIN_CONCURRENCY` 调整），组间随机交错。启用 Actions `仓库保活` 以保证签到可以长期执行。
 
    每次签到依次完成：听歌领取 → 8 次广告领取 → **领取一天畅听 VIP（tvip）**（`/youth/day/vip`，`receive_day` 取当天）→ **升级超级 VIP（svip）**（`/youth/day/vip/upgrade`，升级后约 24 小时有效）。决策以 `/user/vip/detail` 的 `busi_vip` 为准：svip 仍在有效期内则跳过领取与升级，tvip 有效但 svip 未激活则直接升级，均已过期才执行领取+升级。单日 VIP 与升级接口均为概念版测试接口，请遵循"勿频繁调用、勿领多日"的原则。
 
@@ -168,7 +168,7 @@ GitHub Actions 实现 `酷狗概念VIP` 自动签到，每天领取总计 `两�
    - **失败 @ 提及** `NOTIFY_MENTION`：失败/告警时 @ 指定成员（企业微信支持），逗号分隔的 userid 或手机号（11 位数字自动识别为手机号）
    - **并行度** `CHECKIN_CONCURRENCY`：多账号并发签到数（默认 2），账号多时可调大；组间自动随机交错降低风控风险
 
-API源代码来自 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi) ~~图省事直接搬来~~
+API 源代码来自 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)，已精简至本项目实际用到的模块（登录/领取/升级/设备注册等 13 个）。
 
 ## 令牌（Token）机制说明
 
