@@ -75,7 +75,7 @@ jobs:
       # ════════════════════════════════════════════
       - name: 上传加密二维码 artifact
         if: ${{ steps.gen.outcome == 'success' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qr-bundle
           path: qr_bundle.enc
