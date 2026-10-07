@@ -50,6 +50,9 @@ async function login() {
       }
     } else if (result.error_code === 34175) {
       throw new Error("该手机号绑定了多个酷狗账号，请在运行时填写 LOGIN_USERID（要登录的账号 userid）后重试")
+    } else if (result.error_code === 20020 || result.error_code === 34182) {
+      // 20020=验证码过期；34182=验证码错误/已失效
+      throw new Error("验证码过期或错误，请重新运行「手机号登录 → 发送验证码」获取新验证码，更新 Secret CODE 后再登录")
     } else {
       printRed("响应内容")
       console.dir(summarizeResponse(result), { depth: null })
