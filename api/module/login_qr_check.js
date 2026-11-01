@@ -7,16 +7,25 @@ module.exports = (params, useAxios) => {
     useAxios({
       baseURL: 'https://login-user.kugou.com',
       url: '/v2/get_userinfo_qrcode',
-      method: 'GET',
-      params: { plat: 4, appid, srcappid, qrcode: params?.key },
-      encryptType: 'web',
+        method: 'GET',
+        params: {
+          plat: 4,
+          appid,
+          srcappid,
+          qrcode: params?.key,
+          // dev 缺失时不可携带 undefined（axios 会丢弃 undefined 参数，导致签名与实际参数不一致报 20006）
+          ...(params?.cookie?.KUGOU_API_DEV ? { dev: params.cookie.KUGOU_API_DEV } : {}),
+        },
+        encryptType: 'web',
       cookie: params?.cookie || {},
-    }).then(resp => {
-      if (resp.body?.data?.status == 4) {
-        resp.cookie.push(`token=${resp.body?.data?.token}`);
-        resp.cookie.push(`userid=${resp.body?.data?.userid}`);
-      }
-      resolve(resp);
-    }).catch(e => reject(e));
+    })
+      .then((resp) => {
+        if (resp.body?.data?.status == 4) {
+          resp.cookie.push(`token=${resp.body?.data?.token}`);
+          resp.cookie.push(`userid=${resp.body?.data?.userid}`);
+        }
+        resolve(resp);
+      })
+      .catch((e) => reject(e));
   });
 };
